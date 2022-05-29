@@ -136,7 +136,7 @@ class EDA:
             self.null_threshold = threshold
         m = self.train_data.shape[0]
         null_df = self.train_data.isna().sum().reset_index().rename(columns={0: "Null Count"}).sort_values(by=['Null Count'],
-                                                                                                           scending=False)
+                                                                                                           ascending=False)
         null_df = null_df[null_df["Null Count"] > 0]
         # columns to be dropped > null_threshold
         CTBD = null_df[null_df['Null Count']/m >= self.null_threshold]
@@ -289,9 +289,9 @@ class EDA:
 
 
     # hand outliers
-    def handleOutliers(self):
+    def handleOutliers(self, threshold=1.5):
         # grab the outliers
-        outliers = self.checkOutliers()
+        outliers = self.checkOutliers(threshold)
 
         for c in outliers:
             # grab col
