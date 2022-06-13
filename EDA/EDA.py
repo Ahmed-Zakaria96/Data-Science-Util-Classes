@@ -1,12 +1,5 @@
-import numpy as np
-import pandas as pd
-pd.set_option('display.max_columns', None)
-
 from scipy.stats import shapiro
 import statsmodels.api as sm
-
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -15,8 +8,9 @@ class EDA:
     # numeric data types
     numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
 
-    def __init__(self, train_data, test_data, target, skip=None, null_threshold=.6, dup_threshold=.8, corr_threshold=.7, alpha=.05):
+    def __init__(self, train_data, target, test_data=None, val_data=None, skip=None, null_threshold=.6, dup_threshold=.8, corr_threshold=.7, alpha=.05):
         self.train_data = train_data
+        self.val_data = val_data
         self.test_data = test_data
         self.null_threshold = null_threshold
         self.dup_threshold = dup_threshold
@@ -29,16 +23,19 @@ class EDA:
     def grabNumeric(self, target=True, skip=True):
         numCols = list(set(self.train_data.select_dtypes(include=self.numerics).columns) - set(["Id"]))
         if target == False:
-            numCols.remove(self.target)
+            numCols = list(set(numCols) - set([self.target]))
         if self.skip is not None and skip == True:
             numCols = list(set(numCols) - set(self.skip))
         return numCols
 
     # grab categorical data
-    def grabCategorical(self):
-        return list(set(self.train_data.select_dtypes(include=['object']).columns))
+    def grabCategorical(self, target=False):
+        catCols = list(set(self.train_data.select_dtypes(include=['object']).columns))
+        if target == False:
+            catCols = list(set(catCols) - set([self.target]))
+        return catCols
 
-    def visualize(self, plot=None):
+    def visualize(self, plot=None, whis=1.5):
 
         # distribution plot
         if plot == 'dist' or plot is None:
@@ -49,10 +46,12 @@ class EDA:
             j = 0
             for c in numCols:
                 if nR == 1:
-                    sns.histplot(x=self.train_data[c], ax=axes[i])
+                    sns.distplot(x=self.train_data[c], fit=norm, ax=axes[i])
+                    axes[i].set_title(c)
                     i += 1
                 else:
-                    sns.histplot(x=self.train_data[c], ax=axes[i, j])
+                    sns.distplot(x=self.train_data[c], fit=norm, ax=axes[i, j])
+                    axes[i, j].set_title(c)
                     if j < 3:
                         j +=1
                     else:
@@ -61,7 +60,7 @@ class EDA:
 
             fig.suptitle('Distribution of numerical features', fontsize=24, color='darkred')
             fig.tight_layout()
-            fig.subplots_adjust(top=0.95)
+            fig.subplots_adjust(top=0.9)
 
         # boxplot numerical data
         if plot == 'boxplot' or plot is None:
@@ -72,10 +71,10 @@ class EDA:
             j = 0
             for c in numCols:
                 if nR == 1:
-                    sns.boxplot(x=self.train_data[c], orient='h', ax=axes[i])
+                    sns.boxplot(x=self.train_data[c], orient='h', whis=whis, ax=axes[i])
                     i += 1
                 else:
-                    sns.boxplot(x=self.train_data[c], orient='h', ax=axes[i, j])
+                    sns.boxplot(x=self.train_data[c], orient='h', whis=whis, ax=axes[i, j])
                     if j < 3:
                         j +=1
                     else:
@@ -84,7 +83,7 @@ class EDA:
 
             fig.suptitle('Boxplot of numerical features', fontsize=24, color='darkred')
             fig.tight_layout()
-            fig.subplots_adjust(top=0.95)
+            fig.subplots_adjust(top=0.9)
             
 
         # count plot categorical data
@@ -116,7 +115,7 @@ class EDA:
             print("Skipped cols in count plot due to values > 100: \n", skipped)
             fig.suptitle('Countplot of categorical features', fontsize=24, color='darkred')
             fig.tight_layout()
-            fig.subplots_adjust(top=0.95)
+            fig.subplots_adjust(top=0.9)
 
         # correlation heatmap
         if plot == 'corr' or plot is None:
@@ -128,35 +127,41 @@ class EDA:
             sns.heatmap(data=CM, mask=UCM, ax=ax, annot=True)
             fig.suptitle('Correlation heat map of numerical features', fontsize=24, color='darkred')
             fig.tight_layout()
-            fig.subplots_adjust(top=0.95)
+            fig.subplots_adjust(top=0.9)
 
     # define nulls
-    def grabNulls(self, threshold=None):
+    def grabNulls(self, threshold=None, rthreshold=.1):
         if threshold is not None:
             self.null_threshold = threshold
         m = self.train_data.shape[0]
-        null_df = self.train_data.isna().sum().reset_index().rename(columns={0: "Null Count"}).sort_values(by=['Null Count'],
-                                                                                                           ascending=False)
+        null_df = self.train_data.isna().sum().reset_index().rename(columns={0: "Null Count"}).sort_values(by=['Null Count'], ascending=False)
         null_df = null_df[null_df["Null Count"] > 0]
         # columns to be dropped > null_threshold
         CTBD = null_df[null_df['Null Count']/m >= self.null_threshold]
         # rows to be dropped < .1 of samples
-        RTBD = null_df[null_df['Null Count']/m <= .1]
+        RTBD = null_df[null_df['Null Count']/m <= rthreshold]
         # Records to be filled
         RTBF = null_df[((null_df['Null Count']/m <= self.null_threshold)
-                      & (null_df['Null Count']/m > .1))]
+                      & (null_df['Null Count']/m > rthreshold))]
 
         return CTBD, RTBD, RTBF
 
-    def handleNulls(self, threshold=None):
-        CTBD, RTBD, RTBF = self.grabNulls(threshold)
+    def handleNulls(self, threshold=None, rthreshold=.1):
+        CTBD, RTBD, RTBF = self.grabNulls(threshold, rthreshold)
         # drop columns with nulls > threshold
         nCols = [s[0] for s in CTBD.values]
         self.train_data = self.train_data.drop(columns=nCols)
+
         # drop same columns from test data
         if self.test_data is not None:
             self.test_data.drop(columns=nCols, inplace=True)
             self.test_data.dropna(inplace=True)
+
+        # drop same columns for val data
+        if self.val_data is not None:
+            self.val_data.drop(columns=nCols, inplace=True)
+            self.val_data.dropna(inplace=True)
+
         # grab cols with rows cotaining nulls in it
         cols = [s[0] for s in RTBD.values]
         # delete records from column with value < .06
@@ -183,6 +188,12 @@ class EDA:
         # fill categorical cols with mod
         self.train_data[catNull] = self.train_data[catNull].apply(lambda x: x.fillna(x.mode()[0]))
 
+        # fill validation data
+        # fill numerical cols with mean
+        self.val_data[numNull] = self.val_data[numNull].apply(lambda x: x.fillna(x.mean()))
+        # fill categorical cols with mod
+        self.val_data[catNull] = self.val_data[catNull].apply(lambda x: x.fillna(x.mode()[0]))
+
     # duplicated
     def handleDuplicates(self, threshold=None):
         if threshold is not None:
@@ -192,6 +203,8 @@ class EDA:
         # list of columns with same value
         dupCol = []
         for c, cData in self.train_data.iteritems():
+            if c == self.target or (self.skip is not None and c in self.skip):
+                continue
             # Value counts
             VC = any(cData.value_counts().values/m > self.dup_threshold)
             if VC:
@@ -201,12 +214,17 @@ class EDA:
         # drop same columns from test data
         if self.test_data is not None:
             self.test_data.drop(columns=dupCol, inplace=True)
+
+        # drop same columns from val data
+        if self.val_data is not None:
+            self.val_data.drop(columns=dupCol, inplace=True)
         return dupCol
 
     # correlated features
     def handleCorrFeature(self, threshold=None):
         if threshold is not None:
             self.corr_threshold = threshold
+
         numCols = [c for c in self.train_data.columns.tolist() if c in self.grabNumeric()]
         CM = self.train_data[numCols].corr()
         # features to be deleted
@@ -245,11 +263,18 @@ class EDA:
         # drop same columns from test data
         if self.test_data is not None:
             self.test_data.drop(columns=redundantFeatures, inplace=True)
+        
+        # drop same columns from val data
+        if self.val_data is not None:
+            self.val_data.drop(columns=redundantFeatures, inplace=True)
+
         return redundantFeatures, corrValues
 
 
-    def checkOutliers(self, threshold=1.5):
+    def checkOutliers(self, threshold=1.5, skip=None):
         numCols = [c for c in self.train_data.columns.tolist() if c in self.grabNumeric(target=False)]
+        if skip is not None:
+            numCols = list(set(numCols) - set(skip))
         outliers = {}
         for c in self.train_data[numCols]:
             Q1 = self.train_data[c].quantile(.25)
@@ -289,48 +314,63 @@ class EDA:
 
 
     # hand outliers
-    def handleOutliers(self, threshold=1.5):
+    def handleOutliers(self, threshold=1.5, skip=None):
         # grab the outliers
         outliers = self.checkOutliers(threshold)
 
         for c in outliers:
+            if skip is not None:
+                if c in skip:
+                    continue
             # grab col
             col = outliers[c]
             # if there are values below lower bound
             if len(col['Below Lower']) > 0:
                 # replace them with the lower bound
                 self.train_data.loc[col['Below Lower'], c] = col['Lower Bound']
+
             # if there are values above upper bound
             if len(col['Above Upper']) > 0:
                 # replace with the upper bound
                 self.train_data.loc[col['Above Upper'], c] = col['Upper Bound']
 
+            # clamp validation data
+            self.val_data[c][self.val_data[c] < col['Lower Bound']] = col['Lower Bound']
+
+            # clamp validation data
+            self.val_data[c][self.val_data[c] > col['Upper Bound']] = col['Upper Bound']
+
     # check skewness
-    def calcSkew(self, target):
+    def calcSkew(self, target, skip=None):
         n = self.train_data.shape[0]
         numCols = self.grabNumeric(target=target)
+        if skip is not None:
+            numCols = list(set(numCols) - set(skip))
         mu = self.train_data[numCols].mean()
         std = self.train_data[numCols].std()
-        skw = pd.DataFrame(np.sum(np.power((self.train_data[numCols] - mu), 3)) / ((n - 1) * np.power(std, 3)) ).rename(
-                                                                                                       columns={0: "Skew Value"})
+        skw = pd.DataFrame(np.sum(np.power((self.train_data[numCols] - mu), 3)) / ((n - 1) * np.power(std, 3)) ).rename(columns={0: "Skew Value"})
         return skw
 
     # log transformation for skewed features
-    def handleSkew(self, target=False):
-        skw = self.calcSkew(target)
+    def handleSkew(self, target=False, skip=None):
+        skw = self.calcSkew(target, skip)
         for s in skw.index.tolist():
-            if (skw.loc[s][0] > 1 or skw.loc[s][0] < -1) and skw.loc[s][0] >=0:
+            if abs(skw.loc[s][0]) > 1 :
                 # aplly log transform to column with abs(skewness) > 1 (+, -)
                 self.train_data[s] = np.log(1 + abs(self.train_data[s]))
                 if self.test_data is not None:
                     self.test_data[s] = np.log(1 + abs(self.test_data[s]))
 
+                # val data
+                if self.val_data is not None:
+                    self.val_data[s] = np.log(1 + abs(self.val_data[s]))
+
     # check for normal distributed features
     # draw QQ plot
-    def drawQQ(self):
-        numCols = self.grabNumeric()
-        if self.target in numCols:
-            numCols.remove(self.target)
+    def drawQQ(self, target=False, skip=None):
+        numCols = self.grabNumeric(target)
+        if skip is not None:
+            numCols = list(set(numCols) - set(skip))
         nC = 4
         nR = len(numCols) // 4 if len(numCols) % 4 == 0 else (len(numCols) // 4) + 1
         if nR == 1:
@@ -360,18 +400,26 @@ class EDA:
         plt.show();
 
     # shapiro method
-    def checkDistribution(self, threshold=None, target=True, skip=True):
+    def checkDistribution(self, threshold=None, target=True, skip=True, skip_c=None):
         if threshold is not None:
             self.alpha = threshold
         numCols = self.grabNumeric(target=target, skip=skip)
 
+        if skip_c is not None:
+            numCols = list(set(numCols) - set(skip_c))
+        
+        # check len of data
+        if self.train_data.shape[0] < 500:
+            n = self.train_data.shape[0]
+        else:
+            n = 500
         # list for gaussianFeatures
         gaussianFeatures = []
         # list for nonGaussianFeatures
         nonGaussianFeatures = []
         for c in numCols:
             # calc w and p Statistics for each column
-            w_stat, p = shapiro(self.train_data[c].sample(n=500, replace=False))
+            w_stat, p = shapiro(self.train_data[c].sample(n=n, replace=False))
             print('W_Statistic=%.3f, p=%.8f' % (w_stat, p))
 
             # if p > alpha add to gaussianFeatures
@@ -388,8 +436,8 @@ class EDA:
 
 
     # scale features
-    def featureScale(self):
-        gFeatures, nonGFeatures = self.checkDistribution()
+    def featureScale(self, target=False):
+        gFeatures, nonGFeatures = self.checkDistribution(target=target)
         # std scale gausian features
         if len(gFeatures) > 0:
             stdScaler = StandardScaler()
@@ -398,6 +446,9 @@ class EDA:
             if self.test_data is not None:
                 self.test_data[gFeatures] = stdScaler.transform(self.test_data[gFeatures])
 
+            if self.val_data is not None:
+                self.val_data[gFeatures] = stdScaler.transform(self.val_data[gFeatures])
+
         # minmax scale non gausian features
         if len(nonGFeatures) > 0:
             mmScaler = MinMaxScaler()
@@ -405,45 +456,6 @@ class EDA:
             self.train_data[nonGFeatures] = mmScaler.transform(self.train_data[nonGFeatures])
             if self.test_data is not None:
                 self.test_data[nonGFeatures] = mmScaler.transform(self.test_data[nonGFeatures])
-
-    #split data
-    def trainTestSplit(self, test_size, random_state, include=None, exclude=None):
-        if include is None and exclude is None:
-            numCols = self.grabNumeric(target=False)
-
-        elif include is not None:
-            numCols = include
-
-        elif exclude is not None:
-            numCols = self.grabNumeric(target=False)
-            if exclude in numCols:
-                numCols.remove(exclude)
-        else:
-            numCols = self.grabNumeric(target=False)
-
-        if self.test_data is not None:
-            xTrain = self.train_data[numCols]
-            yTrain = self.train_data[self.target]
-            xTest = self.test_data[numCols]
-            yTest = self.test_data[self.target]
-            # check gausian and non gausian features
-            gFeatures, nonGFeatures = self.checkDistribution()
-
-            if len(gFeatures) > 0:
-                stdScaler = StandardScaler()
-                stdScaler = stdScaler.fit(xTrain[gFeatures])
-                xTrain = stdScaler.transform(xTrain[gFeatures])
-                xTest = stdScaler.transform(xTest[gFeatures])
-
-            if len(nonGFeatures) > 0:
-                mmScaler = MinMaxScaler()
-                mmScaler = mmScaler.fit(xTrain[nonGFeatures])
-                xTrain = mmScaler.transform(xTrain[nonGFeatures])
-                xTest = mmScaler.transform(xTest[nonGFeatures])
-
-        else:
-            xTrain, xTest, yTrain, yTest = train_test_split(self.train_data[numCols],
-                                                    self.train_data[self.target],
-                                                    test_size=test_size, random_state=random_state)
-
-        return xTrain, xTest, yTrain, yTest
+            
+            if self.val_data is not None:
+                self.val_data[nonGFeatures] = mmScaler.transform(self.val_data[nonGFeatures])
