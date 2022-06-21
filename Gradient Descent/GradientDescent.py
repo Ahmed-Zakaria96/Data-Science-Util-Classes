@@ -1,7 +1,11 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
-
 
 class GradientDescent:
     def __init__(self, data, alpha=.01, gamma=.9, beta1=.9, beta2=.999, e=1e-8):
@@ -231,7 +235,7 @@ class GradientDescent:
                 opt = "Mini Batch GD"
 
         plt_hX = self.hypo(x0, X)
-        self.plot(opt, size, plt_hX)
+        self.plot(opt, size, plt_hX, size)
 
     def r2_score(self):
         bf = self.steps[-1]["theta"]
@@ -241,7 +245,7 @@ class GradientDescent:
         score = r2_score(y_, self.data[:, [-1]])
         return score
 
-    def plot(self, opt, batch, plt_hX):
+    def plot(self, opt, batch, plt_hX, size):
         x = self.data[:, [0]]
         y = self.data[:, [1]]
         xCost = list(range(len(self.steps)))
@@ -273,13 +277,44 @@ class GradientDescent:
         print("r2_score: ", score)
         print("Optimizer: ", opt)
         print("Batch size: ", batch)
-        print("Total number of iterations: ", self.stepCount - 1)
+        print("Total number of epochs: ", (self.stepCount - 1) * size / self.data.shape[0])
         print("alpha: ", self.alpha)
         if opt == "ADAM":
             print(f"gamma: {self.gamma} | beta1: {self.beta1} | beta2: {self.beta2}")
         if opt == "RMSP" or opt == "mT" or opt == "NAG":
             print(f"gamma: {self.gamma}")
-        print("Optimal thetas values:\n", self.steps[-1]["theta"])
+            
+    def plot_theta(self):
+        X = len(self.steps[0]['theta'])
+        if X < 4:
+            nC = X
+        else:
+            nC = 4
+        nR = X // 4 if X % 4 == 0 else X//4 + 1
+        fig, axes = plt.subplots(nrows=nR, ncols=nC, figsize=(20, nR*6))
+        c = 0
+        r = 0
+        cost = [x['cost'][0] for x in self.steps]
+        for i in range(0, X):
+            theta = [x['theta'][i] for x in self.steps]
+            if nR == 1:
+                axes[c].plot(theta, cost)
+                axes[c].set_xlabel(f'Theta {i}', fontsize=16).set_color('darkred')
+                axes[c].set_ylabel('Cost', fontsize=16).set_color('darkred')
+                axes[c].grid()
+                
+            else:
+                axes[r, c].plot(theta, cost)
+                axes[r, c].set_xlabel(f'Theta {i}', fontsize=16).set_color('darkred')
+                axes[r, c].set_ylabel('Cost', fontsize=16).set_color('darkred')
+                axes[r, c].grid()
+            if c < nC-1:
+                c += 1
+            else:
+                r += 1
+                c = 0
+        fig.suptitle("Cost vs Theta")
+        fig.tight_layout()
 
     # normal equation
     def linear_reg_SVD(self, zero_threshold = 1e-13, with_ones=False):
@@ -305,3 +340,10 @@ class GradientDescent:
         # calculating the optimal coefficients
         optimal_coefficients = vT.T.dot(sigma_pseudo_inverse).dot(u.T).dot(Y)
         return optimal_coefficients
+
+
+# In[ ]:
+
+
+
+

@@ -1,8 +1,20 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+import numpy as np
+import pandas as pd
+
 from scipy.stats import shapiro
 import statsmodels.api as sm
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import norm
 
 class EDA:
     # numeric data types
@@ -459,3 +471,4 @@ class EDA:
             
             if self.val_data is not None:
                 self.val_data[nonGFeatures] = mmScaler.transform(self.val_data[nonGFeatures])
+
