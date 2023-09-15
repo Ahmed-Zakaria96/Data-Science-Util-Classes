@@ -1,4 +1,9 @@
 # Exploratory Data Analysis class
+
+Create instance of the class
+``` eda = EDA() ```
+
+## Instance variables
 ``` def __init__(self, train_data, target, test_data=None, val_data=None, skip=None, null_threshold=.6, dup_threshold=.8, corr_threshold=.7, alpha=.05) ```
 
 ## List of Functions
@@ -45,7 +50,8 @@ basically the same as grabNumeric
 `### handleDuplicates(self, threshold=None)`
 > removes duplicated values based on threshold
 
-
+`### checkOutliers(self, threshold=1.5, skip=None)`
+> returns a dict with column name and a list of outlies index based on the threshold in that column
 
 
 
